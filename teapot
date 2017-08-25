@@ -1,0 +1,49 @@
+#!/usr/bin/env python
+
+import argparse
+import os, sys
+import json
+
+def clean_extension(ext):
+    if ext.startswith('.'):
+        ext = ext[1:]
+
+    return ext.strip()
+
+def write_config(path, config):
+    with open(path, 'w') as config_file:
+        json.dump(config, config_file, indent=4)
+
+def get_config(path="./config.json"):
+    config = None
+    if not os.path.isfile(path):
+        ip = ""
+        while not (ip == "Yes" or ip == "No"):
+            print("No config present; Create a new config? <Yes/No>")
+            ip = sys.stdin.readline().strip()
+            if ip.lower() == "no":
+                sys.exit(0)
+            elif ip.lower() == "yes":
+                config = {}
+                print("What language are you learning, input the file extension."
+                      "Example: clj, cpp, ex.")
+                config["ext"] = clean_extension(sys.stdin.readline())
+
+                print("How to run ." + config["ext"] + " source code."
+                      "\nExample:\n"
+                      "\t lein run example.clj\n"
+                      "\t g++ example.cpp && ./a.out")
+                config["run_command"] = sys.stdin.readline().strip()
+                write_config(path, config)
+    else:
+        with open(path, 'r') as config_file:
+            config = json.load(config_file)
+
+    return config
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Cute teapot tests.')
+    parser.add_argument("-v", "--verbose", help="show all results", action="store_true")
+    args = parser.parse_args()
+    config = get_config()
+    print config
