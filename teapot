@@ -1,8 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import argparse
 import os, sys
 import json
+import importlib
+from string import Template
+import subprocess
 
 class bcolors:
     HEADER = '\033[95m'
@@ -20,6 +23,13 @@ def clean_extension(ext):
 
     return ext.strip()
 
+def clean_run_command(cmd, file_name):
+    cmd = cmd.strip()
+    if file_name not in cmd:
+        print("Run command seems incorrect")
+        sys.exit(1)
+    return cmd.replace(file_name, "${file_name}")
+
 def hr(width=80):
     for i in range(width):
         sys.stdout.write('-')
@@ -30,7 +40,7 @@ def get_default_config_path():
 
 def write_config(path, config):
     with open(path, 'w') as config_file:
-        json.dump(config, config_file, indent=4)
+        json.dump(config, config_file, indent=4, sort_keys=True)
 
 def get_config(path):
     config = None
@@ -57,7 +67,8 @@ def get_config(path):
                       "\t python example.py\n"
                       "\t lein run example.clj\n"
                       "\t g++ example.cpp && ./a.out")
-                config["run_command"] = sys.stdin.readline().strip()
+                config["run_command"] = clean_run_command(sys.stdin.readline(),
+                                                          "example."+config["ext"])
 
                 hr()
                 config["z_housekeeping"] = {"tests" : {}}
@@ -72,19 +83,63 @@ def get_config(path):
     else:
         with open(path, 'r') as config_file:
             config = json.load(config_file)
-            print ("Config loaded " + bcolors.OKGREEN + u"\u2713" + bcolors.ENDC)
+            print("Config loaded " + bcolors.OKGREEN + u"\u2713" + bcolors.ENDC)
 
     return config
 
+def check_output(file_name, config):
+    run_cmd = config["run_command"].replace("${file_name}", file_name)
+    result = subprocess.run(run_cmd.split(), stdout=subprocess.PIPE)
+    if result.returncode != 0:
+        print(result.stderr)
+        sys.exit(result.check_returncode())
+
+    return result.stdout
+
 def execute_tests(test_dir, config, config_path):
-    test_files = [f for f in os.listdir(test_dir) if isfile(join(test_dir, f))]
+    sys.path.append(test_dir)
+
+    test_files = [f for f in os.listdir(test_dir) if os.path.isfile(os.path.join(test_dir, f))]
+    test_files = filter(lambda f: f != "__init__.py", test_files)
+    test_files = filter(lambda f: not f.endswith(".pyc"), test_files)
+
     test_files = sorted(test_files, key=lambda file_name: file_name.split("-")[0])
+
     for test_file_name in test_files:
         if (test_file_name in config["z_housekeeping"]["tests"] and
-            config["z_housekeeping"]["tests"][test_file_name]["last_mod"] >= os.path.getmtime(join(test_dir, test_file_name))):
+            (config["z_housekeeping"]["tests"][test_file_name]["last_mod"] >=
+             os.path.getmtime(os.path.join(test_dir, test_file_name)))):
+            # test passed and no change
             pass
         else:
-            # load file, print question, use python test to test the file?
+            test = importlib.import_module("tests." + test_file_name[:-3])
+            problem_statement = Template(test.get_statement())
+            input_file_name = (os.getcwd() + "/" +
+                               Template(test.get_input_file_name())
+                               .safe_substitute(ext=config["ext"]))
+            stdin_str = test.get_stdin_str()
+            expected_out = test.get_expected_output()
+
+            print(problem_statement.safe_substitute(HL=bcolors.WARNING,
+                                                    ENDHL=bcolors.ENDC))
+            hr()
+            print("Expected Output:")
+            sys.stdout.write(expected_out)
+            hr()
+
+            if not os.path.exists(input_file_name):
+                open(input_file_name, 'a').close()
+                print(input_file_name + " created.")
+                return
+
+            actual_output = str(check_output(input_file_name, config), encoding="utf-8")
+            if actual_output == expected_out:
+                print("Pass " + bcolors.OKGREEN + u"\u2713" + bcolors.ENDC)
+            else:
+                print("act out", actual_output, expected_out)
+                print(bcolors.FAIL + "Fail" + bcolors.ENDC)
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Cute teapot tests.')
