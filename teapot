@@ -29,7 +29,10 @@ def clean_run_command(cmd, file_name):
     if file_name not in cmd:
         print("Run command seems incorrect")
         sys.exit(1)
-    return cmd.replace(file_name, "${file_name}")
+
+    cmd = cmd.replace(file_name, "${file_name}")
+    cmd_list = cmd.split("&&")
+    return cmd_list
 
 def hr(width=80):
     for i in range(width):
@@ -89,12 +92,12 @@ def get_config(path):
     return config
 
 def check_output(file_name, config, stdin_str):
-    run_cmd = config["run_command"].replace("${file_name}", file_name).split()
-    proc = subprocess.Popen(run_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    result = proc.communicate(input=stdin_str.encode("utf-8"))
-    if proc.returncode != 0:
-        print(result.stderr)
-        sys.exit(result.check_returncode())
+    for run_cmd in config["run_command"]:
+        run_cmd = run_cmd.replace("${file_name}", file_name).split()
+        proc = subprocess.Popen(run_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        result = proc.communicate(input=stdin_str.encode("utf-8"))
+        if proc.returncode != 0:
+            sys.exit(result.check_returncode())
 
     return result[0]
 
