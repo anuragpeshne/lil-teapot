@@ -4,46 +4,93 @@ import argparse
 import os, sys
 import json
 
+class bcolors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
 def clean_extension(ext):
     if ext.startswith('.'):
         ext = ext[1:]
 
     return ext.strip()
 
+def hr(width=80):
+    for i in range(width):
+        sys.stdout.write('-')
+    print("")
+
+def get_default_config_path():
+    return os.getcwd() + "/config.json"
+
 def write_config(path, config):
     with open(path, 'w') as config_file:
         json.dump(config, config_file, indent=4)
 
-def get_config(path="./config.json"):
+def get_config(path):
     config = None
     if not os.path.isfile(path):
-        ip = ""
-        while not (ip == "Yes" or ip == "No"):
-            print("No config present; Create a new config? <Yes/No>")
+        done = False
+        while not done:
+            print(bcolors.WARNING + "No config found;" + bcolors.ENDC +
+                  " Create a new config? <Yes/No>")
             ip = sys.stdin.readline().strip()
             if ip.lower() == "no":
                 sys.exit(0)
             elif ip.lower() == "yes":
                 config = {}
-                print("What language are you learning, input the file extension."
-                      "Example: clj, cpp, ex.")
+                hr()
+                print("What language are you learning, input the " +
+                      bcolors.BOLD + "file extension." + bcolors.ENDC +
+                      "\nExample: clj, cpp, ex.")
                 config["ext"] = clean_extension(sys.stdin.readline())
 
-                print("How to run ." + config["ext"] + " source code."
+                hr()
+                print("How to run the file " +
+                      bcolors.BOLD + "'example." + config["ext"] + "'" + bcolors.ENDC +
                       "\nExample:\n"
+                      "\t python example.py\n"
                       "\t lein run example.clj\n"
                       "\t g++ example.cpp && ./a.out")
                 config["run_command"] = sys.stdin.readline().strip()
+
+                hr()
+                config["z_housekeeping"] = {"tests" : {}}
+                print("Config saved " + bcolors.OKGREEN + u"\u2713" + bcolors.ENDC)
+                print(json.dumps(config, indent=4))
+                print("If something seems incorrect, you can correct it by"
+                      " editing 'config.json'")
                 write_config(path, config)
+                done = True
+            else:
+                done = False
     else:
         with open(path, 'r') as config_file:
             config = json.load(config_file)
+            print ("Config loaded " + bcolors.OKGREEN + u"\u2713" + bcolors.ENDC)
 
     return config
+
+def execute_tests(test_dir, config, config_path):
+    test_files = [f for f in os.listdir(test_dir) if isfile(join(test_dir, f))]
+    test_files = sorted(test_files, key=lambda file_name: file_name.split("-")[0])
+    for test_file_name in test_files:
+        if (test_file_name in config["z_housekeeping"]["tests"] and
+            config["z_housekeeping"]["tests"][test_file_name]["last_mod"] >= os.path.getmtime(join(test_dir, test_file_name))):
+            pass
+        else:
+            # load file, print question, use python test to test the file?
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Cute teapot tests.')
     parser.add_argument("-v", "--verbose", help="show all results", action="store_true")
     args = parser.parse_args()
-    config = get_config()
-    print config
+    config = get_config(get_default_config_path())
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    test_dir = script_dir + "/tests"
+    execute_tests(test_dir, config, get_default_config_path())
