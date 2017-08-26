@@ -6,6 +6,7 @@ import json
 import importlib
 from string import Template
 import subprocess
+import time
 
 class bcolors:
     HEADER = '\033[95m'
@@ -87,14 +88,15 @@ def get_config(path):
 
     return config
 
-def check_output(file_name, config):
-    run_cmd = config["run_command"].replace("${file_name}", file_name)
-    result = subprocess.run(run_cmd.split(), stdout=subprocess.PIPE)
-    if result.returncode != 0:
+def check_output(file_name, config, stdin_str):
+    run_cmd = config["run_command"].replace("${file_name}", file_name).split()
+    proc = subprocess.Popen(run_cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    result = proc.communicate(input=stdin_str.encode("utf-8"))
+    if proc.returncode != 0:
         print(result.stderr)
         sys.exit(result.check_returncode())
 
-    return result.stdout
+    return result[0]
 
 def execute_tests(test_dir, config, config_path):
     sys.path.append(test_dir)
@@ -107,10 +109,10 @@ def execute_tests(test_dir, config, config_path):
 
     for test_file_name in test_files:
         if (test_file_name in config["z_housekeeping"]["tests"] and
-            (config["z_housekeeping"]["tests"][test_file_name]["last_mod"] >=
+            (config["z_housekeeping"]["tests"][test_file_name]["mtime"] >=
              os.path.getmtime(os.path.join(test_dir, test_file_name)))):
             # test passed and no change
-            pass
+            print(test_file_name[:-3], bcolors.OKGREEN + u"\u2713" + bcolors.ENDC)
         else:
             test = importlib.import_module("tests." + test_file_name[:-3])
             problem_statement = Template(test.get_statement())
@@ -132,11 +134,17 @@ def execute_tests(test_dir, config, config_path):
                 print(input_file_name + " created.")
                 return
 
-            actual_output = str(check_output(input_file_name, config), encoding="utf-8")
-            if actual_output == expected_out:
+            actual_output = str(check_output(input_file_name, config, stdin_str),
+                                encoding="utf-8")
+            if actual_output.strip() == expected_out.strip():
                 print("Pass " + bcolors.OKGREEN + u"\u2713" + bcolors.ENDC)
+                config["z_housekeeping"]["tests"][test_file_name] = {
+                    "mtime": int(time.time())
+                }
+                write_config(config_path, config)
             else:
-                print("act out", actual_output, expected_out)
+                print("act out:" + actual_output.strip())
+                print("exp out:" + expected_out.strip())
                 print(bcolors.FAIL + "Fail" + bcolors.ENDC)
 
 
