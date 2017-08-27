@@ -149,6 +149,7 @@ def execute_tests(test_dir, config, config_path):
                 print("act out:" + actual_output.strip())
                 print("exp out:" + expected_out.strip())
                 print(bcolors.FAIL + "Fail" + bcolors.ENDC)
+                sys.exit(1)
 
 
 
